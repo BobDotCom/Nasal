@@ -1,0 +1,266 @@
+/*
+An IntelliJ IDEA language support plugin for Nasal.
+Copyright (C) 2024  BobDotCom
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+{
+  parserClass="com.bobdotcom.nasal.parser.NasalParser"
+
+  extends="com.intellij.extapi.psi.ASTWrapperPsiElement"
+
+  psiClassPrefix="Nasal"
+  psiImplClassSuffix="Impl"
+  psiPackage="com.bobdotcom.nasal.psi"
+  psiImplPackage="com.bobdotcom.nasal.psi.impl"
+
+  elementTypeHolderClass="com.bobdotcom.nasal.psi.NasalTypes"
+  elementTypeClass="com.bobdotcom.nasal.psi.NasalElementType"
+  tokenTypeClass="com.bobdotcom.nasal.psi.NasalTokenType"
+}
+
+nasalFile ::= layer
+//{
+//    recoverWhile="layer_recover"
+//}
+
+// The final expression of a layer doesn't need a semi-colon
+private layer ::= (COMMENT|full_expression)* expression?
+
+//property ::= (KEY? SEPARATOR VALUE?) | KEY
+
+//expression ::= (IDENTIFIER|NUMBER|STRING|OPERATOR|TYPE|KEYWORD|KEYWORD2|LPAR|RPAR|LBRA|RBRA)
+
+// Token Precedence Order (https://sourceforge.net/p/flightgear/simgear/ci/adca07/tree/simgear/nasal/parse.c#l13)
+//
+//    Token(s)                                  Order      Notes
+//    -----------------------------------------------------------
+//    SEMI, COMMA                               REVERSE     0
+//    ELLIPSIS                                  SUFFIX      1
+//    RETURN, BREAK, CONTINUE                   PREFIX      2
+//    ASSIGN, PLUSEQ, MINUSEQ, MULEQ, DIVEQ,
+//    CATEQ, BIT_ANDEQ, BIT_OREQ, BIT_XOREQ     REVERSE     3
+//    COLON, QUESTION                           REVERSE     4
+//    NULL_CHAIN                                BINARY      5
+//    VAR                                       PREFIX      6
+//    BIT_OR                                    BINARY      7
+//    BIT_XOR                                   BINARY      8
+//    BIT_AND                                   BINARY      9
+//    OR                                        BINARY      10
+//    AND                                       BINARY      11
+//    EQ, NEQ                                   BINARY      12
+//    LT, LTE, GT, GTE                          BINARY      13
+//    PLUS, MINUS, CAT                          BINARY      14
+//    MUL, DIV                                  BINARY      15
+//    MINUS, NEG, NOT, CAT, BIT_NEG             PREFIX      16
+//    LPAR, LBRA                                SUFFIX      17
+//    DOT, NULL_ACCESS                          BINARY      17
+
+// Rules as defined in parse.c (https://sourceforge.net/p/flightgear/simgear/ci/adca07/tree/simgear/nasal/parse.c#l332)
+//
+// Order        Rule
+// -----------------
+// REVERSE      (level+1 TOKEN level) | level+1
+// BINARY       (level TOKEN level+1) | level+1
+// PREFIX       (level0? TOKEN level) | level+1
+// SUFFIX       (level TOKEN level0?) | level+1
+//
+// All rules have a fallback to level+1
+//
+// Left recursion isn't supported, some rules need the alternative implementations below
+// Order        Implementation
+// ---------------------------
+// REVERSE      (level+1 TOKEN)* level+1
+// BINARY       level+1 (TOKEN level+1)*
+// PREFIX       (level0? TOKEN)* level+1
+// SUFFIX       level+1 (TOKEN level0?)*
+
+
+// Expression is broken down to avoid left-recursion
+expression_no_semi ::= (
+    if_expr |
+    for_expr |
+    while_expr |
+    foreach_expr |
+    forindex_expr
+)
+//private expression0X ::= (
+//    expression_no_semi |
+//    (LPAR expression RPAR) |
+//
+//    assign_var |
+////    create_var |
+//
+////    lookup LPAR (expression COMMA)* expression? RPAR | // Function call
+////    lookup |
+//    NUMBER |
+//    STRING |
+//    TYPE | // TODO: Probably remove this
+////    KEYWORD | // TODO: Probably remove this
+//    NIL |
+//    LBRA (expression COMMA)* expression? RBRA | // List
+//    LBRACE ((IDENTIFIER|SPECIAL|STRING) COLON expression COMMA)* ((IDENTIFIER|SPECIAL|STRING) COLON expression)? RBRACE |  // Hash
+//    function |
+//    (CAT|MINUS) expression |  // Unary negation
+//    NOT expression
+//    )
+//expression2X ::= (
+//    (expression1X QUESTION expression COLON expression ) |
+//
+//
+//    expression1X
+//    )
+private expression_base ::= (
+    expression_no_semi |
+
+//    assign_var |
+//    create_var |
+
+//    lookup |
+
+    NUMBER |
+    STRING+ |
+    TYPE | // TODO: Probably remove this
+    NIL |
+    IDENTIFIER |
+    SPECIAL |
+    CHAR_CONST |
+
+    (LPAR expression0? RPAR) |
+    LBRA (expression0 COMMA)* expression0? RBRA |  // List
+    LPAR (expression0 COMMA)* expression0? RPAR &ASSIGN |  // group assignment
+    LBRACE ((IDENTIFIER|SPECIAL|STRING) COLON expression0 COMMA)* ((IDENTIFIER|SPECIAL|STRING) COLON expression0)? RBRACE |  // Hash
+    !ASSIGN function
+    )
+expression17 ::= (
+    // If left-recursion, replace expression with expression0
+    expression_base (
+        LPAR (expression0 COMMA)* expression0? RPAR |  // Function call
+        LBRA (expression0 COMMA)* expression0? RBRA |  // Lookup
+        (DOT|NULL_ACCESS) expression_base
+        )*
+)
+expression16 ::= (
+    // Note: NEG and BIT_NEG not in lexer
+//    (expression0? (MINUS|NEG|NOT|CAT|BIT_NEG))* expression17
+    (MINUS|NEG|NOT|CAT|BIT_NEG)* expression17
+)
+expression15 ::= (
+    expression16 ((MUL|DIV) expression16)*
+)
+expression14 ::= (
+    expression15 ((PLUS|MINUS|CAT) expression15)*
+)
+expression13 ::= (
+    expression14 ((LT|LTE|GT|GTE) expression14)*
+)
+expression12 ::= (
+    expression13 ((EQ|NEQ) expression13)*
+)
+expression11 ::= (
+    expression12 (AND expression12)*
+)
+expression10 ::= (
+    expression11 (OR expression11)*
+)
+expression9 ::= (
+    expression10 (BIT_AND expression10)*
+)
+expression8 ::= (
+    expression9 (BIT_XOR expression9)*
+)
+expression7 ::= (
+    expression8 (BIT_OR expression8)*
+)
+expression6 ::= (
+//    (expression0? VAR)* expression7
+    VAR* expression7
+)
+expression5 ::= (
+    expression6 (NULL_CHAIN expression6)*
+)
+expression4 ::= (
+    (expression5 (COLON|QUESTION))* expression5
+)
+expression3 ::= (
+    (expression4 ((ASSIGN)|PLUSEQ|MINUSEQ|MULEQ|DIVEQ|CATEQ|BIT_ANDEQ|BIT_OREQ|BIT_XOREQ))* expression4
+)
+expression2 ::= (
+//    (expression0? (RETURN|BREAK|CONTINUE))* expression3
+    (RETURN|BREAK|CONTINUE)* expression3 |
+    (RETURN|BREAK|CONTINUE)+
+)
+expression1 ::= (
+//    expression2 (ELLIPSIS expression0?)*
+    expression2
+)
+expression0 ::= (
+//    (expression1 (SEMI|COMMA))* expression1
+    expression1
+)
+expression ::= (
+    expression0?
+)
+full_expression ::= (
+//    expression_no_semi SEMI? |
+//    function_var SEMI? |
+//    expression SEMI
+    // Apparently you can have as many semicolons as you want
+    expression_no_semi SEMI? |
+    function_var SEMI? |
+    expression SEMI
+)
+
+//lookup ::= (IDENTIFIER|SPECIAL) ((DOT|NULL_ACCESS) lookup)* (LBRA expression RBRA)?
+
+function ::= (
+    FUNC (
+        LPAR
+        // TODO: document
+        ((IDENTIFIER|SPECIAL) COMMA)*
+        (((assign_var COMMA)+ assign_var?) | assign_var | ((IDENTIFIER|SPECIAL) ELLIPSIS?)?)
+        RPAR
+        )? new_layer
+)
+
+new_layer ::= (LBRACE layer RBRACE) | expression SEMI?
+
+if_expr ::= (
+    // If/elsif/else
+    IF LPAR expression RPAR new_layer
+    (ELSIF LPAR expression RPAR new_layer)*
+    (ELSE new_layer)?
+)
+
+//private loop_label ::= (IDENTIFIER|SPECIAL)? SEMI
+
+for_expr ::= (
+//    FOR LPAR ((expression SEMI expression SEMI expression)|loop_label (expression SEMI expression SEMI expression)) RPAR new_layer
+    FOR LPAR expression SEMI expression SEMI expression (SEMI expression)? RPAR new_layer
+)
+
+while_expr ::= WHILE LPAR expression RPAR new_layer
+
+foreach_expr ::= FOREACH LPAR expression SEMI expression (SEMI expression)? RPAR new_layer
+
+forindex_expr ::= FORINDEX LPAR expression SEMI expression (SEMI expression)? RPAR new_layer
+
+assign_var ::= expression4 ASSIGN expression0
+//create_var ::= VAR assign_var
+
+function_var ::= expression4 ASSIGN function
+
+//private layer_recover ::= !(layer)
+
+//meta escape ::=
