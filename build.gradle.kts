@@ -40,7 +40,7 @@ dependencies {
     bundledPlugin("com.intellij.java")
 
     pluginVerifier()
-//    zipSigner()
+    zipSigner()
     instrumentationTools()
 
 //    testFramework(TestFrameworkType.Platform)
