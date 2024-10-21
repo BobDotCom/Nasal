@@ -17,8 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 plugins {
   id("java")
-  id("org.jetbrains.kotlin.jvm") version "1.9.21"
-  id("org.jetbrains.intellij") version "1.16.1"
+  id("org.jetbrains.kotlin.jvm") version "1.9.21"  // TODO: Update this to 2.0.21
+  id("org.jetbrains.intellij.platform") version "2.1.0"
 }
 
 group = "com.bobdotcom"
@@ -26,17 +26,54 @@ version = "2024.2.2"
 
 repositories {
   mavenCentral()
+
+  intellijPlatform {
+    defaultRepositories()
+  }
+}
+
+dependencies {
+  intellijPlatform {
+    create("IC", "2024.2")
+//    intellijIdeaCommunity("2023.3")
+
+    bundledPlugin("com.intellij.java")
+
+    pluginVerifier()
+//    zipSigner()
+    instrumentationTools()
+
+//    testFramework(TestFrameworkType.Platform)
+  }
 }
 
 sourceSets["main"].java.srcDirs("src/main/gen")
 
 // Configure Gradle IntelliJ Plugin
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-gradle-intellij-plugin.html
-intellij {
-  version.set("2023.1.5")
-  type.set("IC") // Target IDE Platform
+intellijPlatform {
+  pluginConfiguration {
+    ideaVersion {
+      sinceBuild = "231"
+//      untilBuild = "241.*"
+    }
+  }
 
-//  plugins.set(listOf("com.intellij.java"))
+  pluginVerification {
+    ides {
+      recommended()
+    }
+  }
+
+  publishing {
+    token = System.getenv("PUBLISH_TOKEN")
+  }
+
+  signing {
+    certificateChainFile = file("certificate/chain.crt")
+    privateKeyFile = file("certificate/private.pem")
+    password = System.getenv("PRIVATE_KEY_PASSWORD")
+  }
 }
 
 tasks {
@@ -47,20 +84,5 @@ tasks {
   }
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     kotlinOptions.jvmTarget = "17"
-  }
-
-  patchPluginXml {
-    sinceBuild.set("231")
-    untilBuild.set("241.*")
-  }
-
-  signPlugin {
-    certificateChainFile.set(file("certificate/chain.crt"))
-    privateKeyFile.set(file("certificate/private.pem"))
-    password.set(System.getenv("PRIVATE_KEY_PASSWORD"))
-  }
-
-  publishPlugin {
-    token.set(System.getenv("PUBLISH_TOKEN"))
   }
 }
