@@ -23,6 +23,6 @@ import javax.swing.*;
 
 public class NasalIcons {
 
-    public static final Icon FILE = IconLoader.getIcon("/icons/Fgnasal_16x16.png", NasalIcons.class);
+    public static final Icon FILE = IconLoader.getIcon("/icons/icon.svg", NasalIcons.class);
 
 }
