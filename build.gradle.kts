@@ -22,7 +22,7 @@ plugins {
 }
 
 group = "com.bobdotcom"
-version = "2024.10.21"
+version = "2024.11.15"
 
 repositories {
   mavenCentral()

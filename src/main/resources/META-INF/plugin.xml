@@ -35,6 +35,11 @@
   ]]></description>
 
   <change-notes><![CDATA[
+    <h2>2024.11.15</h2>
+    <h3>Added</h3>
+    <ul>
+      <li>Added support for newer IDEs</li>
+    </ul>
     <h2>2024.10.21</h2>
     <h3>Added</h3>
     <ul>
